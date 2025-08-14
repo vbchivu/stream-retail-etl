@@ -1,0 +1,94 @@
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: StreamRetail Alerts
+    folder: StreamRetail
+    interval: 1m
+    rules:
+      - uid: sr_high_lag_raw
+        title: High connector lag (raw sink)
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: 'sum(kafka_consumergroup_lag{consumergroup="connect-pg-sales-jdbc-sink"}) > 1000'
+              intervalMs: 60000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+        for: 5m
+        annotations:
+          summary: "Raw JDBC sink lag > 1000 for 5m"
+        labels:
+          severity: warning
+
+      - uid: sr_stalled_ingest
+        title: Ingest stalled (sales)
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              expr: 'sum(rate(kafka_topic_partition_current_offset{topic="sales"}[5m])) < 0.1'
+              intervalMs: 60000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+        for: 2m
+        annotations:
+          summary: "No incoming events on topic 'sales' for 2m"
+        labels:
+          severity: critical
+
+      - uid: sr_stalled_transform
+        title: Transform stalled (ksqlDB)
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              expr: 'sum(rate(kafka_topic_partition_current_offset{topic="sales_agg_minute"}[5m])) < 0.1 and sum(rate(kafka_topic_partition_current_offset{topic="sales"}[5m])) > 0.5'
+              intervalMs: 60000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+        for: 3m
+        annotations:
+          summary: "Input flowing but no aggregate output for 3m"
+        labels:
+          severity: critical
+
+      - uid: sr_pg_down
+        title: Postgres exporter down
+        condition: A
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: 'up{job="postgres_exporter"} == 0'
+              intervalMs: 60000
+              maxDataPoints: 43200
+              datasource:
+                type: prometheus
+                uid: prometheus
+        for: 1m
+        annotations:
+          summary: "Prometheus can't scrape postgres_exporter"
+        labels:
+          severity: critical

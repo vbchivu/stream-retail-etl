@@ -1,0 +1,190 @@
+services:
+  # ---------- Messaging ----------
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    environment:
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+      KAFKA_NODE_ID: 1
+      KAFKA_BROKER_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:9093"
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_LOG_DIRS: "/tmp/kraft-combined-logs"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/9092'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  # ---------- Database ----------
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: ${PGUSER}
+      POSTGRES_PASSWORD: ${PGPASSWORD}
+      POSTGRES_DB: retail_ops
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+
+  # ---------- Producer (synthetic events) ----------
+  producer:
+    build:
+      context: ./producer # ← fixed path (compose file moved to repo root)
+    container_name: producer
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      RATE_PER_SEC: 15
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command:
+      [
+        "bash",
+        "-lc",
+        "until bash -lc '</dev/tcp/kafka/9092'; do sleep 1; done; python app.py",
+      ]
+    restart: unless-stopped
+
+  # ---------- Kafka Connect (JDBC Sinks) ----------
+  connect:
+    build:
+      context: ./compose/connect # ← fixed path
+    container_name: kafka-connect
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_started
+    ports:
+      - "8083:8083"
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: kafka:9092
+      CONNECT_REST_ADVERTISED_HOST_NAME: connect
+      CONNECT_GROUP_ID: connect-cluster
+      CONNECT_CONFIG_STORAGE_TOPIC: _connect-configs
+      CONNECT_OFFSET_STORAGE_TOPIC: _connect-offsets
+      CONNECT_STATUS_STORAGE_TOPIC: _connect-status
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: 1
+      CONNECT_KEY_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_VALUE_CONVERTER: org.apache.kafka.connect.json.JsonConverter
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: "false"
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: "true"
+      CONNECT_PLUGIN_PATH: /usr/share/java,/usr/share/confluent-hub-components
+      CONNECT_CONFIG_PROVIDERS: env
+      CONNECT_CONFIG_PROVIDERS_ENV_CLASS: org.apache.kafka.common.config.provider.EnvVarConfigProvider
+      CONNECT_SINK_POSTGRES_USER: ${PGUSER}
+      CONNECT_SINK_POSTGRES_PASSWORD: ${PGPASSWORD}
+      # Register only the raw sink by default; enable agg when running with the 'ksql' profile
+      CONNECT_REGISTER_AGG: ${CONNECT_REGISTER_AGG:-false}
+    volumes:
+      - ./compose/connectors:/connectors # ← fixed path
+    command:
+      - bash
+      - -lc
+      - |
+        /etc/confluent/docker/run &
+        bash /connectors/register.sh || true
+        wait -n
+    restart: unless-stopped
+
+  # ---------- ksqlDB (streaming transforms) ----------
+  ksqldb:
+    image: confluentinc/cp-ksqldb-server:7.6.0
+    container_name: ksqldb
+    profiles: ["ksql"] # ← disable by default; opt-in with --profile ksql
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8088:8088"
+    environment:
+      KSQL_BOOTSTRAP_SERVERS: kafka:9092
+      KSQL_LISTENERS: http://0.0.0.0:8088
+      KSQL_KSQL_SERVICE_ID: ks1_
+      KSQL_KSQL_QUERIES_FILE: /opt/ksql/statements.sql
+      KSQL_KSQL_STREAMS_AUTO_OFFSET_RESET: earliest
+    volumes:
+      - ./ksql/statements.sql:/opt/ksql/statements.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc '</dev/tcp/127.0.0.1/8088'"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 20s
+
+  # ---------- Metrics exporters ----------
+  kafka-exporter:
+    image: danielqsj/kafka-exporter:v1.7.0
+    container_name: kafka-exporter
+    command:
+      - "--kafka.server=kafka:9092"
+      - "--web.listen-address=:9308"
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "9308:9308"
+    restart: unless-stopped
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${PGUSER}:${PGPASSWORD}@postgres:5432/retail_ops?sslmode=disable"
+    depends_on:
+      postgres:
+        condition: service_started
+    ports:
+      - "9187:9187"
+    restart: unless-stopped
+
+  # ---------- Prometheus & Grafana ----------
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro # ← fixed path
+    depends_on:
+      - kafka-exporter
+      - postgres-exporter
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    depends_on:
+      - prometheus
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./compose/grafana/provisioning:/etc/grafana/provisioning:ro # ← fixed path
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  grafana-data:

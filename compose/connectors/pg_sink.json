@@ -1,0 +1,16 @@
+{
+  "name": "pg-sales-jdbc-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "topics": "sales",
+    "connection.url": "jdbc:postgresql://postgres:5432/retail_ops",
+    "connection.user": "${env:CONNECT_SINK_POSTGRES_USER}",
+    "connection.password": "${env:CONNECT_SINK_POSTGRES_PASSWORD}",
+    "insert.mode": "insert",
+    "auto.create": "true",
+    "auto.evolve": "true",
+    "pk.mode": "none",
+    "table.name.format": "sales_raw"
+  }
+}

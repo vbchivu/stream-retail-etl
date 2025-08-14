@@ -1,0 +1,86 @@
+{
+  "id": null,
+  "title": "StreamRetail — Ops Overview",
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Ingest rate (sales msgs/s)",
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_topic_partition_current_offset{topic=\"sales\"}[1m]))",
+          "legendFormat": "sales"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Transform output rate (sales_agg_minute msgs/s)",
+      "targets": [
+        {
+          "expr": "sum(rate(kafka_topic_partition_current_offset{topic=\"sales_agg_minute\"}[1m]))",
+          "legendFormat": "sales_agg_minute"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Connector lag — raw sink",
+      "targets": [
+        {
+          "expr": "sum(kafka_consumergroup_lag{consumergroup=\"connect-pg-sales-jdbc-sink\"})",
+          "legendFormat": "pg-sales-jdbc-sink"
+        }
+      ],
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "type": "timeseries",
+      "title": "Connector lag — aggregate sink",
+      "targets": [
+        {
+          "expr": "sum(kafka_consumergroup_lag{consumergroup=\"connect-pg-agg-jdbc-sink\"})",
+          "legendFormat": "pg-agg-jdbc-sink"
+        }
+      ],
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Postgres rows — sales_raw",
+      "targets": [
+        {
+          "expr": "pg_stat_user_tables_n_live_tup{relname=\"sales_raw\"}"
+        }
+      ],
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 14 }
+    },
+    {
+      "type": "stat",
+      "title": "Postgres rows — sales_agg_minute",
+      "targets": [
+        {
+          "expr": "pg_stat_user_tables_n_live_tup{relname=\"sales_agg_minute\"}"
+        }
+      ],
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 14 }
+    },
+    {
+      "type": "stat",
+      "title": "Exporter health — Kafka",
+      "targets": [{ "expr": "up{job=\"kafka_exporter\"}" }],
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 14 }
+    },
+    {
+      "type": "stat",
+      "title": "Exporter health — Postgres",
+      "targets": [{ "expr": "up{job=\"postgres_exporter\"}" }],
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 14 }
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "name": "pg-agg-jdbc-sink",
+  "config": {
+    "connector.class": "io.confluent.connect.jdbc.JdbcSinkConnector",
+    "tasks.max": "1",
+    "topics": "sales_agg_minute",
+
+    "connection.url": "jdbc:postgresql://postgres:5432/retail_ops",
+    "connection.user": "${env:CONNECT_SINK_POSTGRES_USER}",
+    "connection.password": "${env:CONNECT_SINK_POSTGRES_PASSWORD}",
+
+    "auto.create": "false",
+    "auto.evolve": "false",
+
+    "insert.mode": "upsert",
+    "pk.mode": "record_value",
+    "pk.fields": "store_id,window_start_ms",
+    "table.name.format": "sales_agg_minute",
+
+    "delete.enabled": "false",
+    "batch.size": "2000",
+
+    "value.converter": "org.apache.kafka.connect.json.JsonConverter",
+    "value.converter.schemas.enable": "false",
+    "key.converter": "org.apache.kafka.connect.storage.StringConverter",
+    "key.converter.schemas.enable": "false"
+  }
+}

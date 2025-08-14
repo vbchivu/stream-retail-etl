@@ -1,0 +1,86 @@
+# =========================================
+# Python
+# =========================================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pkl
+*.so
+.venv/
+env/
+venv/
+ENV/
+*.egg-info/
+.eggs/
+*.egg
+
+# Virtual environment & Python environment files
+.python-version
+
+# Environment variables
+.env
+.env.*
+!env.example
+
+# =========================================
+# Docker
+# =========================================
+**/.container-build/
+docker-compose.override.yml
+
+# Docker volumes & temp data
+volumes/
+tmp/
+*.pid
+
+# =========================================
+# Logs & runtime files
+# =========================================
+*.log
+*.sqlite
+*.sqlite3
+coverage.xml
+dist/
+build/
+htmlcov/
+.cache/
+.tox/
+pytest_cache/
+.mypy_cache/
+.pytest_cache/
+
+# =========================================
+# Node / Frontend (if applicable in docs/UI)
+# =========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# =========================================
+# IDE / Editor specific
+# =========================================
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# =========================================
+# OS generated files
+# =========================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# =========================================
+# Project-specific exclusions
+# =========================================
+archive/
+in-progress/
+sql/old/
+*.bak
+*.tmp
